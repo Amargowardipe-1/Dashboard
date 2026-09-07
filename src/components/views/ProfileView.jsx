@@ -42,7 +42,6 @@ export default function ProfileView() {
   const [fullName, setFullName] = useState('');
   const [mobile, setMobile] = useState('');
   const [currency, setCurrency] = useState('INR');
-  const [upiId, setUpiId] = useState('');
 
   // Fetch admin profile from backend
   const { 
@@ -65,7 +64,6 @@ export default function ProfileView() {
       setFullName(dbUser.fullName || reduxProfile?.name || '');
       setMobile(dbUser.mobile || '');
       setCurrency(dbUser.currency || 'INR');
-      setUpiId(dbUser.upiId || '');
     }
   }, [dbUser, reduxProfile]);
 
@@ -109,8 +107,7 @@ export default function ProfileView() {
     updateMutation.mutate({
       fullName: fullName.trim(),
       mobile: mobile.trim(),
-      currency,
-      upiId: upiId.trim()
+      currency
     });
   };
 
@@ -416,22 +413,6 @@ export default function ProfileView() {
                     <option value="INR">INR (₹) - Indian Rupee</option>
                   </select>
                 </div>
-              </div>
-
-              {/* UPI ID / Payment Handle */}
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                  <CreditCard size={13} />
-                  Admin UPI ID / Settlement Handle
-                </label>
-                <input
-                  type="text"
-                  value={upiId}
-                  onChange={(e) => setUpiId(e.target.value)}
-                  placeholder="e.g. admin@upi or payment-settle@okhdfcbank"
-                  className="w-full h-11 px-3.5 rounded-xl border border-border bg-background text-sm font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
-                />
-                <p className="text-[11px] text-muted-foreground">Used for admin settlement verification and quick test transactions.</p>
               </div>
 
               {/* Save Button */}

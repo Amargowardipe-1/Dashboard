@@ -21,6 +21,7 @@ import NotificationsView from '@/components/views/NotificationsView';
 import SupportQueriesView from '@/components/views/SupportQueriesView';
 import AiUsageView from '@/components/views/AiUsageView';
 import SettingsView from '@/components/views/SettingsView';
+import ProfileView from '@/components/views/ProfileView';
 
 const VALID_VIEWS = [
   'dashboard',
@@ -34,7 +35,8 @@ const VALID_VIEWS = [
   'notifications',
   'support-queries',
   'ai-usage',
-  'settings'
+  'settings',
+  'profile'
 ];
 
 export default function DashboardShell({ initialView }) {
@@ -173,6 +175,8 @@ export default function DashboardShell({ initialView }) {
         return <AiUsageView />;
       case 'settings':
         return <SettingsView />;
+      case 'profile':
+        return <ProfileView />;
       default:
         return <DashboardOverview onViewChange={(view) => dispatch(setActiveView(view))} />;
     }

@@ -104,7 +104,7 @@ export default function Sidebar() {
       {/* Admin Profile bottom section */}
       <div className="p-3 border-t border-border bg-muted/30">
         <div 
-          onClick={() => dispatch(setActiveView('settings'))}
+          onClick={() => dispatch(setActiveView('profile'))}
           className={`flex items-center gap-3 p-2 rounded-xl hover:bg-secondary cursor-pointer transition-colors group relative overflow-hidden`}
         >
           <div className="h-9 w-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold shrink-0 border border-primary/20">

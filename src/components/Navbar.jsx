@@ -235,7 +235,7 @@ export default function Navbar() {
               <div className="p-1.5 space-y-1">
                 <button
                   onClick={() => {
-                    dispatch(setActiveView('settings'));
+                    dispatch(setActiveView('profile'));
                     setProfileDropdownOpen(false);
                   }}
                   className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-all"

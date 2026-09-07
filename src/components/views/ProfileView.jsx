@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
@@ -323,8 +323,8 @@ export default function ProfileView() {
             </div>
           </div>
           <div>
-            <div className="text-lg font-bold text-foreground">{currency} Active</div>
-            <p className="text-xs text-muted-foreground">Multi-currency exchange live</p>
+            <div className="text-lg font-bold text-foreground">INR (₹) Active</div>
+            <p className="text-xs text-muted-foreground">Primary platform currency</p>
           </div>
         </div>
       </div>
@@ -414,11 +414,6 @@ export default function ProfileView() {
                     className="w-full h-11 px-3.5 rounded-xl border border-border bg-background text-sm font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
                   >
                     <option value="INR">INR (₹) - Indian Rupee</option>
-                    <option value="USD">USD ($) - US Dollar</option>
-                    <option value="EUR">EUR (€) - Euro</option>
-                    <option value="GBP">GBP (£) - British Pound</option>
-                    <option value="AED">AED (د.إ) - UAE Dirham</option>
-                    <option value="CAD">CAD (C$) - Canadian Dollar</option>
                   </select>
                 </div>
               </div>

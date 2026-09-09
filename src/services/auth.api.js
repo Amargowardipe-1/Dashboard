@@ -43,6 +43,38 @@ export const authApi = {
     const response = await apiClient.put('/auth/profile', profileData);
     return response.data;
   },
+
+  // Change password for authenticated admin
+  changePassword: async (currentPassword, newPassword) => {
+    const response = await apiClient.post('/auth/change-password', {
+      currentPassword,
+      newPassword,
+    });
+    return response.data;
+  },
+
+  // Get active user sessions from backend
+  getSessions: async () => {
+    const response = await apiClient.get('/auth/sessions');
+    return response.data;
+  },
+
+  // Logout all sessions/devices
+  logoutAllSessions: async () => {
+    try {
+      const response = await apiClient.post('/auth/logout-all');
+      return response.data;
+    } catch (err) {
+      console.warn('[Auth] Logout-all API error:', err.message);
+      throw err;
+    }
+  },
+
+  // Get administrative audit logs
+  getAuditLogs: async (limit = 20) => {
+    const response = await apiClient.get(`/v1/admin/audit-logs?limit=${limit}`);
+    return response.data;
+  },
 };
 
 export default authApi;

@@ -7,7 +7,7 @@ import { dashboardApi } from '@/services/dashboard.api';
 import { useCurrency } from '@/hooks/useCurrency';
 import { ChartSkeleton } from '../ui/Skeleton';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid } from 'recharts';
-import { Layers, ShieldCheck, Zap, Server, ShieldAlert, ChevronRight, Trash2, Pencil } from 'lucide-react';
+import { Layers, ShieldCheck, Zap, Server, ShieldAlert, ChevronRight, Trash2, Pencil, Bot, Receipt, Mic, Users, SlidersHorizontal, Check, Crown } from 'lucide-react';
 import Dialog from '../ui/Dialog';
 
 const ICON_MAP = {
@@ -15,14 +15,14 @@ const ICON_MAP = {
   layers: Layers,
   zap: Zap,
   shield: ShieldAlert,
-  crown: Zap
+  crown: Crown
 };
 
 const COLOR_MAP = {
-  free: 'text-slate-500 bg-slate-500/10',
-  basic: 'text-indigo-500 bg-indigo-500/10',
-  pro: 'text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 shadow-emerald-500/5',
-  enterprise: 'text-amber-500 bg-amber-500/10'
+  free: 'text-slate-400 bg-slate-500/10 border-slate-500/20',
+  basic: 'text-indigo-400 bg-indigo-500/10 border-indigo-500/20',
+  pro: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
+  enterprise: 'text-amber-400 bg-amber-500/10 border-amber-500/20'
 };
 
 const EMPTY_CREATE_FORM = {
@@ -267,6 +267,19 @@ export default function PlansView() {
       value: convertAmount(item.value, 'INR')
     }));
   }, [summary?.pie, convertAmount]);
+
+  const sortedPlans = React.useMemo(() => {
+    return [...plans].sort((a, b) => {
+      const orderA = a.displayOrder ?? 0;
+      const orderB = b.displayOrder ?? 0;
+      if (orderA !== orderB && (orderA > 0 || orderB > 0)) {
+        return orderA - orderB;
+      }
+      const priceA = Number(a.price ?? a.basePrice ?? 0);
+      const priceB = Number(b.price ?? b.basePrice ?? 0);
+      return priceA - priceB;
+    });
+  }, [plans]);
   
   const isLoading = plansLoading || summaryLoading;
 
@@ -300,31 +313,49 @@ export default function PlansView() {
 
       {/* Pricing Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-        {plans.map((plan) => {
+        {sortedPlans.map((plan) => {
           const Icon = ICON_MAP[plan.icon] || Zap;
           const colorClass = COLOR_MAP[plan.slug] || 'text-slate-500 bg-slate-500/10';
           const frequencyLabel = plan.billingCycle === 'monthly' ? 'month' : (plan.billingCycle === 'yearly' ? 'year' : 'forever');
           const baseCurrency = plan.currency || plan.baseCurrency || 'INR';
+          const isPlanActive = plan.status === 'active';
           
           return (
             <div 
               key={plan._id || plan.slug} 
-              className={`rounded-xl border border-border bg-card p-5 text-card-foreground shadow-sm flex flex-col justify-between hover:shadow-md hover:border-muted-foreground/30 transition-all duration-200`}
+              className="rounded-2xl border border-border bg-card p-5 text-card-foreground shadow-sm flex flex-col justify-between hover:shadow-md hover:border-primary/30 transition-all duration-200 group relative"
             >
               <div>
-                {/* Header */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-foreground uppercase tracking-wider">{plan.name}</span>
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-primary/10 text-primary border border-primary/20">
-                      INR (₹)
-                    </span>
+                {/* Header: Icon, Plan Name, Status & Action Icons */}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 border ${colorClass}`}>
+                      <Icon size={18} />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <h4 className="text-sm font-bold text-foreground capitalize tracking-tight truncate">{plan.name}</h4>
+                        {plan.isPopular && (
+                          <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/15 text-amber-500 border border-amber-500/30 shrink-0">
+                            ★ Popular
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className={`inline-block w-1.5 h-1.5 rounded-full ${isPlanActive ? 'bg-emerald-500' : 'bg-amber-400'}`} />
+                        <span className="text-[11px] font-medium capitalize text-muted-foreground">
+                          {plan.status || 'Active'}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5">
+
+                  {/* Header Actions: Edit & Delete */}
+                  <div className="flex items-center gap-1 shrink-0">
                     <button
                       onClick={() => handleEditPlanClick(plan)}
-                      className="p-1 rounded-lg hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
-                      title="Edit Price & Details"
+                      className="p-1.5 rounded-lg hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
+                      title="Edit Plan & Limits"
                     >
                       <Pencil size={13} />
                     </button>
@@ -334,66 +365,113 @@ export default function PlansView() {
                           deletePlanMutation.mutate(plan._id);
                         }
                       }}
-                      className="p-1 rounded-lg hover:bg-rose-500/10 text-muted-foreground hover:text-rose-500 transition-colors"
+                      className="p-1.5 rounded-lg hover:bg-rose-500/10 text-muted-foreground hover:text-rose-500 transition-colors"
                       title="Delete Plan"
                     >
                       <Trash2 size={13} />
                     </button>
-                    <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${colorClass}`}>
-                      <Icon size={16} />
+                  </div>
+                </div>
+
+                {/* Pricing Block */}
+                <div className="mt-4 pt-3 border-t border-border/60">
+                  <div className="flex items-baseline gap-1 text-foreground">
+                    <span className="text-3xl font-black tracking-tight">
+                      {formatAmount(plan.price || plan.basePrice || 0)}
+                    </span>
+                    <span className="text-xs font-semibold text-muted-foreground">/{frequencyLabel}</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-0.5 font-medium">
+                    {plan.durationDays ? `${plan.durationDays} days duration` : 'Standard billing cycle'}
+                  </p>
+                </div>
+
+                {/* Plan Description */}
+                <p className="mt-3 text-xs text-muted-foreground leading-relaxed line-clamp-2 min-h-[32px]">
+                  {plan.description || 'Full access to AI expense tracking features and quotas.'}
+                </p>
+
+                {/* AI Quotas & Usage Limits */}
+                <div className="mt-4 rounded-xl bg-muted/40 border border-border/80 p-3 space-y-2">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-foreground">
+                    <span className="flex items-center gap-1.5 text-primary">
+                      <SlidersHorizontal size={12} />
+                      Usage Quotas
+                    </span>
+                    <span className="text-[10px] text-muted-foreground font-medium">
+                      Grace: {plan.limits?.gracePeriodDays ?? 7}d
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 pt-1 border-t border-border/50 text-[10px]">
+                    <div className="flex items-center gap-1.5 text-muted-foreground">
+                      <Bot size={11} className="text-primary shrink-0" />
+                      <span className="truncate">AI Chat:</span>
+                      <span className="font-bold text-foreground ml-auto">
+                        {plan.limits?.chatbotLimit ? `${plan.limits.chatbotLimit}/mo` : 'Unlimited'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 text-muted-foreground">
+                      <Receipt size={11} className="text-primary shrink-0" />
+                      <span className="truncate">Receipts:</span>
+                      <span className="font-bold text-foreground ml-auto">
+                        {plan.limits?.receiptScannerLimit ? `${plan.limits.receiptScannerLimit}/mo` : 'Unlimited'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 text-muted-foreground">
+                      <Mic size={11} className="text-primary shrink-0" />
+                      <span className="truncate">Voice AI:</span>
+                      <span className="font-bold text-foreground ml-auto">
+                        {plan.limits?.voiceScannerLimit ? `${plan.limits.voiceScannerLimit}/mo` : 'Unlimited'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 text-muted-foreground">
+                      <Users size={11} className="text-primary shrink-0" />
+                      <span className="truncate">Split Bill:</span>
+                      <span className={`font-bold ml-auto ${plan.limits?.enableSplitBill !== false ? 'text-emerald-500' : 'text-slate-400'}`}>
+                        {plan.limits?.enableSplitBill !== false ? 'Yes' : 'No'}
+                      </span>
                     </div>
                   </div>
                 </div>
-                
-                {/* Pricing info */}
-                <div className="mt-4 flex flex-col">
-                  <div className="flex items-baseline text-foreground">
-                    <span className="text-3xl font-extrabold tracking-tight">
-                      {formatAmount(plan.price || plan.basePrice || 0)}
-                    </span>
-                    <span className="ml-1 text-xs font-semibold text-muted-foreground">/{frequencyLabel}</span>
-                  </div>
-                  <div className="text-[11px] font-medium text-muted-foreground mt-0.5">
-                    <span>Currency: INR (₹)</span>
-                  </div>
-                </div>
-                
-                <p className="mt-3.5 text-xs text-muted-foreground leading-relaxed">{plan.description}</p>
-                
-                {/* Limits list */}
-                <div className="mt-4 p-2.5 bg-muted/40 border border-border rounded-lg text-[10px] space-y-1">
-                  <p className="font-bold text-foreground mb-1 text-[11px]">Plan Quota Limits:</p>
-                  <p className="flex justify-between"><span className="text-muted-foreground">Chatbot Queries:</span> <span className="font-bold text-foreground">{plan.limits?.chatbotLimit || 'No limit'}</span></p>
-                  <p className="flex justify-between"><span className="text-muted-foreground">Receipt Scans:</span> <span className="font-bold text-foreground">{plan.limits?.receiptScannerLimit || 'No limit'}</span></p>
-                  <p className="flex justify-between"><span className="text-muted-foreground">Voice Scanner:</span> <span className="font-bold text-foreground">{plan.limits?.voiceScannerLimit || 'No limit'}</span></p>
-                  <p className="flex justify-between"><span className="text-muted-foreground">Grace Days:</span> <span className="font-bold text-foreground">{plan.limits?.gracePeriodDays || 7} days</span></p>
-                </div>
 
-                {/* Feature List */}
-                <ul className="mt-4 space-y-2 border-t border-border pt-4">
-                  {(plan.features || []).map((feature, i) => (
-                    <li key={i} className="flex items-start gap-2 text-[11px] text-muted-foreground">
-                      <span className="text-emerald-500 font-bold leading-none select-none mt-0.5">✓</span>
-                      <span>{feature}</span>
-                    </li>
-                  ))}
-                </ul>
+                {/* Features List */}
+                <div className="mt-4 pt-3 border-t border-border/60">
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2">Features Included</p>
+                  <ul className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                    {(plan.features || []).length > 0 ? (
+                      plan.features.map((feature, i) => (
+                        <li key={i} className="flex items-start gap-2 text-[11px] text-muted-foreground">
+                          <Check size={12} className="text-emerald-500 shrink-0 mt-0.5" />
+                          <span className="leading-tight">{feature}</span>
+                        </li>
+                      ))
+                    ) : (
+                      <li className="text-[11px] text-muted-foreground italic">Standard plan features</li>
+                    )}
+                  </ul>
+                </div>
               </div>
 
-              <div className="mt-6 flex items-center gap-2">
+              {/* Action Buttons Footer */}
+              <div className="mt-5 pt-3 border-t border-border/60 flex items-center gap-2">
                 <button 
                   onClick={() => handleEditPlanClick(plan)}
-                  className="flex-1 h-8 flex items-center justify-center gap-1 text-[11px] font-bold rounded-lg bg-primary/10 hover:bg-primary/20 text-primary transition-all duration-150 border border-primary/20"
+                  className="flex-1 h-8 flex items-center justify-center gap-1.5 text-[11px] font-bold rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground transition-all duration-150 shadow-sm"
                 >
-                  <Pencil size={12} />
-                  Edit Price
+                  <Pencil size={11} />
+                  Edit Plan
                 </button>
                 <button 
                   onClick={() => handleConfigureLimits(plan)}
-                  className="flex-1 h-8 flex items-center justify-center gap-1 text-[11px] font-bold rounded-lg border border-border hover:bg-secondary text-muted-foreground hover:text-foreground transition-all duration-150"
+                  className="h-8 px-3 flex items-center justify-center gap-1 text-[11px] font-bold rounded-lg border border-border hover:bg-secondary text-muted-foreground hover:text-foreground transition-all duration-150"
+                  title="Configure Limits Only"
                 >
+                  <SlidersHorizontal size={11} />
                   Limits
-                  <ChevronRight size={12} />
                 </button>
               </div>
             </div>

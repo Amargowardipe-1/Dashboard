@@ -35,6 +35,11 @@ const EMPTY_CREATE_FORM = {
   icon: 'crown',
   status: 'active',
   features: '',
+  chatbotLimit: 50,
+  receiptScannerLimit: 30,
+  voiceScannerLimit: 20,
+  gracePeriodDays: 7,
+  enableSplitBill: true,
   _slugEdited: false,
 };
 
@@ -55,6 +60,11 @@ export default function PlansView() {
     status: 'active',
     description: '',
     features: '',
+    chatbotLimit: 0,
+    receiptScannerLimit: 0,
+    voiceScannerLimit: 0,
+    gracePeriodDays: 7,
+    enableSplitBill: true,
   });
 
   // Form states for configuration
@@ -154,14 +164,19 @@ export default function PlansView() {
       status: plan.status || 'active',
       description: plan.description || '',
       features: Array.isArray(plan.features) ? plan.features.join('\n') : '',
+      chatbotLimit: plan.limits?.chatbotLimit ?? 0,
+      receiptScannerLimit: plan.limits?.receiptScannerLimit ?? 0,
+      voiceScannerLimit: plan.limits?.voiceScannerLimit ?? 0,
+      gracePeriodDays: plan.limits?.gracePeriodDays ?? 7,
+      enableSplitBill: plan.limits?.enableSplitBill !== false,
     });
   };
 
   const handleEditFormChange = (e) => {
-    const { name, value } = e.target;
+    const { name, value, type, checked } = e.target;
     setEditForm((prev) => ({
       ...prev,
-      [name]: value,
+      [name]: type === 'checkbox' ? checked : value,
     }));
   };
 
@@ -182,19 +197,27 @@ export default function PlansView() {
       status: editForm.status,
       description: editForm.description.trim(),
       features: featuresArray,
+      limits: {
+        chatbotLimit: Number(editForm.chatbotLimit) || 0,
+        receiptScannerLimit: Number(editForm.receiptScannerLimit) || 0,
+        voiceScannerLimit: Number(editForm.voiceScannerLimit) || 0,
+        gracePeriodDays: Number(editForm.gracePeriodDays) || 7,
+        enableSplitBill: Boolean(editForm.enableSplitBill),
+      },
     };
 
     console.log("[PlansView] Dashboard currency from useCurrency():", currency);
-    console.log("[PlansView] Sending plan update payload:", JSON.stringify({ price: payload.price, currency: payload.currency }));
+    console.log("[PlansView] Sending plan update payload with limits:", JSON.stringify({ price: payload.price, limits: payload.limits }));
 
     updatePlanMutation.mutate({ id: editingPlan._id, data: payload });
   };
 
   const handleCreateFormChange = (e) => {
-    const { name, value } = e.target;
+    const { name, value, type, checked } = e.target;
+    const finalValue = type === 'checkbox' ? checked : value;
     setCreateForm((prev) => ({
       ...prev,
-      [name]: value,
+      [name]: finalValue,
       ...(name === 'name' && !prev._slugEdited
         ? { slug: value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') }
         : {}),
@@ -227,6 +250,13 @@ export default function PlansView() {
       icon: createForm.icon,
       status: createForm.status,
       features: featuresArray,
+      limits: {
+        chatbotLimit: Number(createForm.chatbotLimit) || 0,
+        receiptScannerLimit: Number(createForm.receiptScannerLimit) || 0,
+        voiceScannerLimit: Number(createForm.voiceScannerLimit) || 0,
+        gracePeriodDays: Number(createForm.gracePeriodDays) || 7,
+        enableSplitBill: Boolean(createForm.enableSplitBill),
+      },
     };
     createPlanMutation.mutate(payload);
   };
@@ -455,6 +485,7 @@ export default function PlansView() {
         isOpen={!!editingPlan}
         onClose={() => setEditingPlan(null)}
         title={`Edit Plan & Price - ${editingPlan?.name || ''}`}
+        size="lg"
       >
         {editingPlan && (
           <form onSubmit={handleSaveEditPlan} className="space-y-4 text-xs">
@@ -566,6 +597,115 @@ export default function PlansView() {
                 rows={4}
                 className="px-3 py-2 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary resize-none font-mono"
               />
+            </div>
+
+            {/* Feature & Usage Limits Section */}
+            <div className="border-t border-border pt-4 mt-2">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                    <Zap size={14} className="text-amber-500" />
+                    Feature & Usage Limits
+                  </h4>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    Configure feature quotas and allowances for subscribers of this plan. (0 = Unlimited)
+                  </p>
+                </div>
+                <span className="text-[10px] font-semibold text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-md">
+                  Usage Quotas
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-xl border border-border bg-muted/20">
+                {/* Chatbot Queries Limit */}
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="font-semibold text-foreground text-[11px]">Chatbot Queries Limit</label>
+                    <span className="text-[10px] text-muted-foreground font-mono">0 = Unlimited</span>
+                  </div>
+                  <input
+                    type="number"
+                    name="chatbotLimit"
+                    value={editForm.chatbotLimit}
+                    onChange={handleEditFormChange}
+                    min="0"
+                    placeholder="e.g. 50 (0 for unlimited)"
+                    className="h-9 px-3 rounded-lg border border-border bg-background text-foreground text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+
+                {/* Receipt Scans Limit */}
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="font-semibold text-foreground text-[11px]">Receipt Scans Limit</label>
+                    <span className="text-[10px] text-muted-foreground font-mono">0 = Unlimited</span>
+                  </div>
+                  <input
+                    type="number"
+                    name="receiptScannerLimit"
+                    value={editForm.receiptScannerLimit}
+                    onChange={handleEditFormChange}
+                    min="0"
+                    placeholder="e.g. 30 (0 for unlimited)"
+                    className="h-9 px-3 rounded-lg border border-border bg-background text-foreground text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+
+                {/* Voice Scanner Limit */}
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="font-semibold text-foreground text-[11px]">Voice Scanner Limit</label>
+                    <span className="text-[10px] text-muted-foreground font-mono">0 = Unlimited</span>
+                  </div>
+                  <input
+                    type="number"
+                    name="voiceScannerLimit"
+                    value={editForm.voiceScannerLimit}
+                    onChange={handleEditFormChange}
+                    min="0"
+                    placeholder="e.g. 20 (0 for unlimited)"
+                    className="h-9 px-3 rounded-lg border border-border bg-background text-foreground text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+
+                {/* Grace Period (Days) */}
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="font-semibold text-foreground text-[11px]">Grace Period (Days)</label>
+                    <span className="text-[10px] text-muted-foreground">Renewal buffer</span>
+                  </div>
+                  <input
+                    type="number"
+                    name="gracePeriodDays"
+                    value={editForm.gracePeriodDays}
+                    onChange={handleEditFormChange}
+                    min="0"
+                    placeholder="e.g. 7"
+                    className="h-9 px-3 rounded-lg border border-border bg-background text-foreground text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+
+                {/* Split Bill Switch */}
+                <div className="col-span-1 sm:col-span-2 flex items-center justify-between gap-3 p-3 rounded-lg border border-border bg-background mt-1">
+                  <div>
+                    <p className="font-semibold text-foreground text-xs">Enable Split Bill</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">Allow users on this plan to create split bills in groups</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setEditForm((prev) => ({ ...prev, enableSplitBill: !prev.enableSplitBill }))}
+                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 cursor-pointer focus:outline-none ${
+                      editForm.enableSplitBill ? 'bg-emerald-500' : 'bg-muted-foreground/30'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                        editForm.enableSplitBill ? 'translate-x-[18px]' : 'translate-x-[3px]'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
             </div>
 
             <div className="border-t border-border pt-4 mt-2 flex justify-end gap-2">
@@ -685,6 +825,7 @@ export default function PlansView() {
         isOpen={isCreateModalOpen}
         onClose={() => { setIsCreateModalOpen(false); setCreateForm(EMPTY_CREATE_FORM); }}
         title="Create New Plan Tier"
+        size="lg"
       >
         <form onSubmit={handleCreatePlan} className="space-y-4 text-xs">
           <div className="grid grid-cols-2 gap-3">
@@ -828,6 +969,115 @@ export default function PlansView() {
               className="px-3 py-2 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary resize-none font-mono"
             />
             <span className="text-[10px] text-muted-foreground">Each line becomes a feature bullet shown to mobile app users.</span>
+          </div>
+
+          {/* Feature & Usage Limits Section */}
+          <div className="border-t border-border pt-4 mt-2">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                  <Zap size={14} className="text-amber-500" />
+                  Feature & Usage Limits
+                </h4>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Decide AI quotas and usage allowances for this new plan (0 = Unlimited).
+                </p>
+              </div>
+              <span className="text-[10px] font-semibold text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-md">
+                Usage Quotas
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-xl border border-border bg-muted/20">
+              {/* Chatbot Queries Limit */}
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="font-semibold text-foreground text-[11px]">Chatbot Queries Limit</label>
+                  <span className="text-[10px] text-muted-foreground font-mono">0 = Unlimited</span>
+                </div>
+                <input
+                  type="number"
+                  name="chatbotLimit"
+                  value={createForm.chatbotLimit}
+                  onChange={handleCreateFormChange}
+                  min="0"
+                  placeholder="e.g. 50 (0 for unlimited)"
+                  className="h-9 px-3 rounded-lg border border-border bg-background text-foreground text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              {/* Receipt Scans Limit */}
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="font-semibold text-foreground text-[11px]">Receipt Scans Limit</label>
+                  <span className="text-[10px] text-muted-foreground font-mono">0 = Unlimited</span>
+                </div>
+                <input
+                  type="number"
+                  name="receiptScannerLimit"
+                  value={createForm.receiptScannerLimit}
+                  onChange={handleCreateFormChange}
+                  min="0"
+                  placeholder="e.g. 30 (0 for unlimited)"
+                  className="h-9 px-3 rounded-lg border border-border bg-background text-foreground text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              {/* Voice Scanner Limit */}
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="font-semibold text-foreground text-[11px]">Voice Scanner Limit</label>
+                  <span className="text-[10px] text-muted-foreground font-mono">0 = Unlimited</span>
+                </div>
+                <input
+                  type="number"
+                  name="voiceScannerLimit"
+                  value={createForm.voiceScannerLimit}
+                  onChange={handleCreateFormChange}
+                  min="0"
+                  placeholder="e.g. 20 (0 for unlimited)"
+                  className="h-9 px-3 rounded-lg border border-border bg-background text-foreground text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              {/* Grace Period (Days) */}
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="font-semibold text-foreground text-[11px]">Grace Period (Days)</label>
+                  <span className="text-[10px] text-muted-foreground">Renewal buffer</span>
+                </div>
+                <input
+                  type="number"
+                  name="gracePeriodDays"
+                  value={createForm.gracePeriodDays}
+                  onChange={handleCreateFormChange}
+                  min="0"
+                  placeholder="e.g. 7"
+                  className="h-9 px-3 rounded-lg border border-border bg-background text-foreground text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              {/* Split Bill Switch */}
+              <div className="col-span-1 sm:col-span-2 flex items-center justify-between gap-3 p-3 rounded-lg border border-border bg-background mt-1">
+                <div>
+                  <p className="font-semibold text-foreground text-xs">Enable Split Bill</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Allow users on this plan to create split bills in groups</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCreateForm((prev) => ({ ...prev, enableSplitBill: !prev.enableSplitBill }))}
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 cursor-pointer focus:outline-none ${
+                    createForm.enableSplitBill ? 'bg-emerald-500' : 'bg-muted-foreground/30'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                      createForm.enableSplitBill ? 'translate-x-[18px]' : 'translate-x-[3px]'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
           </div>
 
           <div className="border-t border-border pt-4 mt-2 flex justify-end gap-2">

@@ -13,4 +13,8 @@ export const supportApi = {
     const response = await apiClient.post(`/v1/admin/support-queries/${id}/reply`, payload);
     return response.data;
   },
+  deleteQuery: async (id) => {
+    const response = await apiClient.delete(`/v1/admin/support-queries/${id}`);
+    return response.data;
+  },
 };

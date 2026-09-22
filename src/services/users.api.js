@@ -107,5 +107,10 @@ export const usersApi = {
     const response = await apiClient.post(`/v1/admin/users/${id}/reset-password`);
     return response.data;
   },
+
+  createUser: async (userData) => {
+    const response = await apiClient.post('/v1/admin/users', userData);
+    return response.data;
+  },
 };
 export default usersApi;

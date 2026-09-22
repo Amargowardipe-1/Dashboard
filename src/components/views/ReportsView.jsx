@@ -103,34 +103,104 @@ export default function ReportsView() {
   const [activeTab, setActiveTab] = useState('overview');
   const [paymentPage, setPaymentPage] = useState(1);
   const [paymentStatus, setPaymentStatus] = useState('');
-  const currentYear = new Date().getFullYear();
 
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonthStr = `${currentYear}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+  // Timeframe filter state
+  const [dateFilterType, setDateFilterType] = useState('month'); // 'this_month' | 'last_month' | 'month' | 'year' | 'range'
+  const [selectedMonth, setSelectedMonth] = useState(currentMonthStr);
+  const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [startDate, setStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return d.toISOString().split('T')[0];
+  });
+  const [endDate, setEndDate] = useState(() => now.toISOString().split('T')[0]);
+
+  // Compute filter params for API queries
+  const getFilterParams = () => {
+    if (dateFilterType === 'this_month') {
+      return { year: currentYear, month: now.getMonth() + 1 };
+    }
+    if (dateFilterType === 'last_month') {
+      const prev = new Date(currentYear, now.getMonth() - 1, 1);
+      return { year: prev.getFullYear(), month: prev.getMonth() + 1 };
+    }
+    if (dateFilterType === 'month') {
+      if (selectedMonth) {
+        const [y, m] = selectedMonth.split('-');
+        return { year: Number(y), month: Number(m) };
+      }
+      return { year: currentYear, month: now.getMonth() + 1 };
+    }
+    if (dateFilterType === 'year') {
+      return { year: Number(selectedYear) };
+    }
+    if (dateFilterType === 'range') {
+      return { startDate, endDate };
+    }
+    return { year: currentYear, month: now.getMonth() + 1 };
+  };
+
+  const filterParams = getFilterParams();
+
+  // Readable label for the current period
+  const getActivePeriodLabel = () => {
+    if (dateFilterType === 'this_month') {
+      return `This Month (${now.toLocaleString('default', { month: 'short' })} ${currentYear}) · Day-wise`;
+    }
+    if (dateFilterType === 'last_month') {
+      const prev = new Date(currentYear, now.getMonth() - 1, 1);
+      return `Last Month (${prev.toLocaleString('default', { month: 'short' })} ${prev.getFullYear()}) · Day-wise`;
+    }
+    if (dateFilterType === 'month') {
+      if (selectedMonth) {
+        const [y, m] = selectedMonth.split('-');
+        const d = new Date(Number(y), Number(m) - 1, 1);
+        return `${d.toLocaleString('default', { month: 'long' })} ${y} · Day-wise`;
+      }
+      return `Current Month · Day-wise`;
+    }
+    if (dateFilterType === 'year') {
+      return `Full Year ${selectedYear} · 12 Months`;
+    }
+    if (dateFilterType === 'range') {
+      return `${startDate} to ${endDate} · Day-wise`;
+    }
+    return '';
+  };
+
+  const activePeriodLabel = getActivePeriodLabel();
+
+  // Queries hooked to filterParams
   const { data: summary, isLoading: summaryLoading, error: summaryError, refetch } = useQuery({
-    queryKey: ['reportsSummary'],
-    queryFn: () => reportsApi.getSummary(),
+    queryKey: ['reportsSummary', filterParams],
+    queryFn: () => reportsApi.getSummary(filterParams),
   });
 
   const { data: revenue, isLoading: revenueLoading } = useQuery({
-    queryKey: ['reportsRevenue', currentYear],
-    queryFn: () => reportsApi.getRevenue(currentYear),
+    queryKey: ['reportsRevenue', filterParams],
+    queryFn: () => reportsApi.getRevenue(filterParams),
     enabled: activeTab === 'overview' || activeTab === 'revenue',
   });
 
   const { data: users, isLoading: usersLoading } = useQuery({
-    queryKey: ['reportsUsers'],
-    queryFn: () => reportsApi.getUsers(),
+    queryKey: ['reportsUsers', filterParams],
+    queryFn: () => reportsApi.getUsers(filterParams),
     enabled: activeTab === 'overview' || activeTab === 'users',
   });
 
   const { data: subscriptions, isLoading: subsLoading } = useQuery({
-    queryKey: ['reportsSubscriptions'],
-    queryFn: () => reportsApi.getSubscriptions(),
+    queryKey: ['reportsSubscriptions', filterParams],
+    queryFn: () => reportsApi.getSubscriptions(filterParams),
     enabled: activeTab === 'overview' || activeTab === 'subscriptions',
   });
 
   const { data: payments, isLoading: paymentsLoading } = useQuery({
-    queryKey: ['reportsPayments', paymentPage, paymentStatus],
-    queryFn: () => reportsApi.getPayments({ page: paymentPage, limit: 12, status: paymentStatus || undefined }),
+    queryKey: ['reportsPayments', paymentPage, paymentStatus, filterParams],
+    queryFn: () => reportsApi.getPayments({ page: paymentPage, limit: 12, status: paymentStatus || undefined, ...filterParams }),
     enabled: activeTab === 'payments',
   });
 
@@ -154,19 +224,44 @@ export default function ReportsView() {
     );
   }
 
+  // Determine active data sets for charts (Day-wise vs Month-wise)
+  const isDayWiseRevenue = !!revenue?.isDayWise;
+  const revenueChartData = isDayWiseRevenue ? (revenue?.dailyData || []) : (revenue?.monthlyData || []);
+
+  const isDayWiseUsers = !!users?.isDayWise;
+  const userGrowthChartData = isDayWiseUsers ? (users?.dailyGrowth || []) : (users?.monthlyGrowth || []);
+
+  const subTrendData = (subscriptions?.dailySubscriptionTrend && subscriptions.dailySubscriptionTrend.length > 0)
+    ? subscriptions.dailySubscriptionTrend
+    : (subscriptions?.monthlySubscriptionTrend || []);
+
   // ── Download handler ────────────────────────────────────────
   const handleDownload = () => {
     const ts = new Date().toISOString().split('T')[0];
     if (activeTab === 'overview' || activeTab === 'revenue') {
-      const rows = (revenue?.monthlyData || []).map(m => ({
-        Month: m.name,
-        [`Total Revenue (${currency})`]: m.total,
-        'Payments Count': m.payments,
-      }));
-      downloadCSV(`revenue_report_${ts}.csv`, rows, ['Month', `Total Revenue (${currency})`, 'Payments Count']);
+      if (isDayWiseRevenue) {
+        const rows = (revenue?.dailyData || []).map(d => ({
+          Date: d.name || d.date,
+          [`Total Revenue (${currency})`]: d.total,
+          'Payments Count': d.payments,
+        }));
+        downloadCSV(`daily_revenue_${ts}.csv`, rows, ['Date', `Total Revenue (${currency})`, 'Payments Count']);
+      } else {
+        const rows = (revenue?.monthlyData || []).map(m => ({
+          Month: m.name,
+          [`Total Revenue (${currency})`]: m.total,
+          'Payments Count': m.payments,
+        }));
+        downloadCSV(`revenue_report_${ts}.csv`, rows, ['Month', `Total Revenue (${currency})`, 'Payments Count']);
+      }
     } else if (activeTab === 'users') {
-      const rows = (users?.monthlyGrowth || []).map(m => ({ Month: m.name, 'New Signups': m.signups }));
-      downloadCSV(`users_report_${ts}.csv`, rows, ['Month', 'New Signups']);
+      if (isDayWiseUsers) {
+        const rows = (users?.dailyGrowth || []).map(d => ({ Date: d.name || d.date, 'New Signups': d.signups }));
+        downloadCSV(`daily_users_growth_${ts}.csv`, rows, ['Date', 'New Signups']);
+      } else {
+        const rows = (users?.monthlyGrowth || []).map(m => ({ Month: m.name, 'New Signups': m.signups }));
+        downloadCSV(`users_report_${ts}.csv`, rows, ['Month', 'New Signups']);
+      }
     } else if (activeTab === 'subscriptions') {
       const rows = (subscriptions?.recentHistory || []).map(h => ({
         User: h.user,
@@ -194,9 +289,9 @@ export default function ReportsView() {
 
   // ── Determine if download is ready ──────────────────────────
   const isDownloadReady = (
-    (activeTab === 'overview' || activeTab === 'revenue') && revenue?.monthlyData
+    (activeTab === 'overview' || activeTab === 'revenue') && (revenue?.dailyData || revenue?.monthlyData)
   ) || (
-    activeTab === 'users' && users?.monthlyGrowth
+    activeTab === 'users' && (users?.dailyGrowth || users?.monthlyGrowth)
   ) || (
     activeTab === 'subscriptions' && subscriptions?.recentHistory
   ) || (
@@ -209,7 +304,9 @@ export default function ReportsView() {
       <div className="flex items-start justify-between gap-4 border-b border-border pb-5">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">Billing &amp; System Reports</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Live analytics and data reports sourced directly from your database.</p>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Live analytics and reports with interactive Date &amp; Month picker for day-wise and month-wise inspection.
+          </p>
         </div>
         <button
           onClick={handleDownload}
@@ -219,6 +316,112 @@ export default function ReportsView() {
           <Download size={13} />
           Download CSV
         </button>
+      </div>
+
+      {/* Date & Month Picker Toolbar */}
+      <div className="rounded-xl border border-border bg-card p-4 shadow-sm space-y-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2 text-xs font-bold text-foreground">
+            <Activity size={15} className="text-primary" />
+            <span>Report Filter &amp; Time Window:</span>
+            <span className="text-xs font-normal text-muted-foreground ml-1">
+              ({activePeriodLabel})
+            </span>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 pt-1">
+          {/* Preset Buttons */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {[
+              { key: 'this_month', label: 'This Month' },
+              { key: 'last_month', label: 'Last Month' },
+              { key: 'month', label: 'Pick Month' },
+              { key: 'year', label: 'Year-wise' },
+              { key: 'range', label: 'Custom Range' },
+            ].map(preset => (
+              <button
+                key={preset.key}
+                onClick={() => {
+                  setDateFilterType(preset.key);
+                  setPaymentPage(1);
+                }}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                  dateFilterType === preset.key
+                    ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/20'
+                    : 'border border-border text-muted-foreground hover:text-foreground hover:bg-secondary'
+                }`}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Conditional Month Picker Input */}
+          {dateFilterType === 'month' && (
+            <div className="flex items-center gap-2 pl-2 border-l border-border animate-in fade-in duration-200">
+              <span className="text-xs text-muted-foreground font-medium">Month:</span>
+              <input
+                type="month"
+                value={selectedMonth}
+                max={currentMonthStr}
+                onChange={(e) => {
+                  setSelectedMonth(e.target.value);
+                  setPaymentPage(1);
+                }}
+                className="h-8 px-2.5 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+            </div>
+          )}
+
+          {/* Conditional Year Dropdown */}
+          {dateFilterType === 'year' && (
+            <div className="flex items-center gap-2 pl-2 border-l border-border animate-in fade-in duration-200">
+              <span className="text-xs text-muted-foreground font-medium">Year:</span>
+              <select
+                value={selectedYear}
+                onChange={(e) => {
+                  setSelectedYear(Number(e.target.value));
+                  setPaymentPage(1);
+                }}
+                className="h-8 px-2.5 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              >
+                {[currentYear, currentYear - 1, currentYear - 2].map(y => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Conditional Custom Date Range */}
+          {dateFilterType === 'range' && (
+            <div className="flex items-center gap-2 pl-2 border-l border-border flex-wrap animate-in fade-in duration-200">
+              <span className="text-xs text-muted-foreground font-medium">From:</span>
+              <input
+                type="date"
+                value={startDate}
+                max={endDate || undefined}
+                onChange={(e) => {
+                  setStartDate(e.target.value);
+                  setPaymentPage(1);
+                }}
+                className="h-8 px-2.5 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+              <span className="text-xs text-muted-foreground font-medium">To:</span>
+              <input
+                type="date"
+                value={endDate}
+                min={startDate || undefined}
+                max={now.toISOString().split('T')[0]}
+                onChange={(e) => {
+                  setEndDate(e.target.value);
+                  setPaymentPage(1);
+                }}
+                className="h-8 px-2.5 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Tabs */}
@@ -253,13 +456,17 @@ export default function ReportsView() {
 
           {/* Revenue Bar + User Growth side by side */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            <Section title="Monthly Revenue (This Year)" desc={`Revenue trend for ${currentYear}`} isLoading={revenueLoading}>
+            <Section 
+              title={isDayWiseRevenue ? "Daily Revenue" : `Monthly Revenue (${selectedYear})`} 
+              desc={`Revenue trend for ${activePeriodLabel}`} 
+              isLoading={revenueLoading}
+            >
               <div className="h-56">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={revenue?.monthlyData || []} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                  <BarChart data={revenueChartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" opacity={0.3} />
-                    <XAxis dataKey="name" tick={{ fontSize: 10 }} stroke="#94A3B8" />
-                    <YAxis tickFormatter={v => `${symbol}${(v/1000).toFixed(0)}k`} tick={{ fontSize: 10 }} stroke="#94A3B8" />
+                    <XAxis dataKey="name" tick={{ fontSize: 9 }} stroke="#94A3B8" />
+                    <YAxis tickFormatter={v => `${symbol}${(v/1000).toFixed(0)}k`} tick={{ fontSize: 9 }} stroke="#94A3B8" />
                     <Tooltip formatter={v => [formatAmount(v), 'Revenue']} contentStyle={{ backgroundColor: 'var(--color-popover)', borderColor: 'var(--color-border)', borderRadius: '12px', fontSize: '12px' }} />
                     <Bar dataKey="total" fill="#10b981" radius={[4,4,0,0]} name="Revenue" />
                   </BarChart>
@@ -267,15 +474,19 @@ export default function ReportsView() {
               </div>
             </Section>
 
-            <Section title="User Signups (This Year)" desc={`New user registrations per month — ${currentYear}`} isLoading={usersLoading}>
+            <Section 
+              title={isDayWiseUsers ? "Daily User Signups" : `User Signups (${selectedYear})`} 
+              desc={`New user registrations — ${activePeriodLabel}`} 
+              isLoading={usersLoading}
+            >
               <div className="h-56">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={users?.monthlyGrowth || []} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                  <LineChart data={userGrowthChartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" opacity={0.3} />
-                    <XAxis dataKey="name" tick={{ fontSize: 10 }} stroke="#94A3B8" />
-                    <YAxis tick={{ fontSize: 10 }} stroke="#94A3B8" />
+                    <XAxis dataKey="name" tick={{ fontSize: 9 }} stroke="#94A3B8" />
+                    <YAxis tick={{ fontSize: 9 }} stroke="#94A3B8" allowDecimals={false} />
                     <Tooltip contentStyle={{ backgroundColor: 'var(--color-popover)', borderColor: 'var(--color-border)', borderRadius: '12px', fontSize: '12px' }} />
-                    <Line type="monotone" dataKey="signups" stroke="#6366f1" strokeWidth={2} dot={false} name="Signups" />
+                    <Line type="monotone" dataKey="signups" stroke="#6366f1" strokeWidth={2} dot={userGrowthChartData.length <= 15} name="Signups" />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -316,13 +527,17 @@ export default function ReportsView() {
       {/* ── Revenue Tab ──────────────────────────────────────── */}
       {activeTab === 'revenue' && (
         <>
-          <Section title={`Monthly Revenue Breakdown — ${currentYear}`} desc="Total payments received per month" isLoading={revenueLoading}>
+          <Section 
+            title={isDayWiseRevenue ? `Daily Revenue Breakdown — ${activePeriodLabel}` : `Monthly Revenue Breakdown — ${selectedYear}`} 
+            desc={isDayWiseRevenue ? "Total payments received per day in selected period" : "Total payments received per month"} 
+            isLoading={revenueLoading}
+          >
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={revenue?.monthlyData || []} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
+                <BarChart data={revenueChartData} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" opacity={0.3} />
-                  <XAxis dataKey="name" tick={{ fontSize: 10 }} stroke="#94A3B8" />
-                  <YAxis tickFormatter={v => `${symbol}${(v/1000).toFixed(0)}k`} tick={{ fontSize: 10 }} stroke="#94A3B8" />
+                  <XAxis dataKey="name" tick={{ fontSize: 9 }} stroke="#94A3B8" />
+                  <YAxis tickFormatter={v => `${symbol}${(v/1000).toFixed(0)}k`} tick={{ fontSize: 9 }} stroke="#94A3B8" />
                   <Tooltip formatter={v => [formatAmount(v), 'Revenue']} contentStyle={{ backgroundColor: 'var(--color-popover)', borderColor: 'var(--color-border)', borderRadius: '12px', fontSize: '12px' }} />
                   <Bar dataKey="total" fill="#10b981" radius={[4,4,0,0]} name="Revenue" />
                 </BarChart>
@@ -330,9 +545,9 @@ export default function ReportsView() {
             </div>
           </Section>
 
-          <Section title="Revenue by Plan" desc="Lifetime revenue contribution by plan type" isLoading={revenueLoading}>
+          <Section title="Revenue by Plan" desc={`Revenue contribution by plan type in ${activePeriodLabel}`} isLoading={revenueLoading}>
             <div className="space-y-3">
-              {(revenue?.revenueByPlan || []).map((r, i) => {
+              {(revenue?.revenueByPlan || []).map((r) => {
                 const total = (revenue?.revenueByPlan || []).reduce((s, x) => s + x.revenue, 0);
                 const pct = total > 0 ? Math.round((r.revenue / total) * 100) : 0;
                 return (
@@ -347,7 +562,7 @@ export default function ReportsView() {
                 );
               })}
               {(revenue?.revenueByPlan || []).length === 0 && !revenueLoading && (
-                <p className="text-xs text-center text-muted-foreground py-6">No payment data available yet.</p>
+                <p className="text-xs text-center text-muted-foreground py-6">No payment data available for this timeframe.</p>
               )}
             </div>
           </Section>
@@ -367,13 +582,17 @@ export default function ReportsView() {
             )}
           </div>
 
-          <Section title="Monthly User Signups" desc={`New registrations per month — ${currentYear}`} isLoading={usersLoading}>
+          <Section 
+            title={isDayWiseUsers ? `Daily User Signups — ${activePeriodLabel}` : `Monthly User Signups — ${selectedYear}`} 
+            desc={isDayWiseUsers ? "New registrations per day" : `New registrations per month — ${selectedYear}`} 
+            isLoading={usersLoading}
+          >
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={users?.monthlyGrowth || []} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <BarChart data={userGrowthChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" opacity={0.3} />
-                  <XAxis dataKey="name" tick={{ fontSize: 10 }} stroke="#94A3B8" />
-                  <YAxis tick={{ fontSize: 10 }} stroke="#94A3B8" />
+                  <XAxis dataKey="name" tick={{ fontSize: 9 }} stroke="#94A3B8" />
+                  <YAxis tick={{ fontSize: 9 }} stroke="#94A3B8" allowDecimals={false} />
                   <Tooltip contentStyle={{ backgroundColor: 'var(--color-popover)', borderColor: 'var(--color-border)', borderRadius: '12px', fontSize: '12px' }} />
                   <Bar dataKey="signups" fill="#6366f1" radius={[4,4,0,0]} name="New Users" />
                 </BarChart>
@@ -413,13 +632,17 @@ export default function ReportsView() {
       {/* ── Subscriptions Tab ─────────────────────────────────── */}
       {activeTab === 'subscriptions' && (
         <>
-          <Section title="Activations vs Churn — Monthly" desc={`Subscription events for ${currentYear}`} isLoading={subsLoading}>
+          <Section 
+            title={subscriptions?.dailySubscriptionTrend?.length > 0 ? `Activations vs Churn — Daily (${activePeriodLabel})` : `Activations vs Churn — Monthly (${selectedYear})`} 
+            desc={`Subscription events for ${activePeriodLabel}`} 
+            isLoading={subsLoading}
+          >
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={subscriptions?.monthlySubscriptionTrend || []} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <BarChart data={subTrendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" opacity={0.3} />
-                  <XAxis dataKey="name" tick={{ fontSize: 10 }} stroke="#94A3B8" />
-                  <YAxis tick={{ fontSize: 10 }} stroke="#94A3B8" />
+                  <XAxis dataKey="name" tick={{ fontSize: 9 }} stroke="#94A3B8" />
+                  <YAxis tick={{ fontSize: 9 }} stroke="#94A3B8" allowDecimals={false} />
                   <Tooltip contentStyle={{ backgroundColor: 'var(--color-popover)', borderColor: 'var(--color-border)', borderRadius: '12px', fontSize: '12px' }} />
                   <Legend verticalAlign="top" height={32} wrapperStyle={{ fontSize: '11px', fontWeight: '600' }} />
                   <Bar dataKey="Activated" fill="#10b981" radius={[4,4,0,0]} name="Activated" />
@@ -496,7 +719,7 @@ export default function ReportsView() {
             <div className="p-5 border-b border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
                 <h3 className="text-sm font-bold text-foreground">Payment Records</h3>
-                <p className="text-xs text-muted-foreground">All payment transactions from the database.</p>
+                <p className="text-xs text-muted-foreground">Showing transactions for {activePeriodLabel}.</p>
               </div>
               <div className="flex items-center gap-2">
                 <select

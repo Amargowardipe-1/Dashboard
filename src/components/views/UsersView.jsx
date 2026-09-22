@@ -16,12 +16,18 @@ import {
   UserX, 
   UserCheck, 
   Eye, 
+  EyeOff,
   Mail,
   ShieldAlert,
   Clock,
   Calendar,
   DollarSign,
-  PlusCircle
+  PlusCircle,
+  UserPlus,
+  User,
+  Lock,
+  Phone,
+  Key
 } from 'lucide-react';
 
 export default function UsersView() {
@@ -31,6 +37,20 @@ export default function UsersView() {
   const [page, setPage] = useState(1);
   const [selectedUser, setSelectedUser] = useState(null);
   const [actionUserMenu, setActionUserMenu] = useState(null);
+
+  // Create User State
+  const [isCreateUserOpen, setIsCreateUserOpen] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    fullName: '',
+    email: '',
+    password: '',
+    mobile: '',
+    role: 'user',
+    plan: 'free',
+    accountStatus: 'active'
+  });
+  const [showPassword, setShowPassword] = useState(false);
+  const [formError, setFormError] = useState('');
 
   const queryClient = useQueryClient();
   const [dialogTab, setDialogTab] = useState('profile'); // 'profile' or 'subscription'
@@ -103,6 +123,61 @@ export default function UsersView() {
     onError: (err) => alert(err.message || 'Failed to send password reset email.')
   });
 
+  const createUserMutation = useMutation({
+    mutationFn: (userData) => usersApi.createUser(userData),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries(['usersList']);
+      queryClient.invalidateQueries(['dashboardSummary']);
+      alert(res.message || 'User created successfully!');
+      setIsCreateUserOpen(false);
+      setCreateForm({
+        fullName: '',
+        email: '',
+        password: '',
+        mobile: '',
+        role: 'user',
+        plan: 'free',
+        accountStatus: 'active'
+      });
+      setFormError('');
+    },
+    onError: (err) => {
+      const msg = err?.response?.data?.message || err.message || 'Failed to create user.';
+      setFormError(msg);
+    }
+  });
+
+  const handleCreateSubmit = (e) => {
+    e.preventDefault();
+    setFormError('');
+
+    if (!createForm.fullName.trim() || createForm.fullName.trim().length < 3) {
+      setFormError('Full name must be at least 3 characters.');
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+    if (!createForm.email.trim() || !emailRegex.test(createForm.email.trim())) {
+      setFormError('Please enter a valid email address.');
+      return;
+    }
+    if (!createForm.password || createForm.password.length < 6) {
+      setFormError('Password must be at least 6 characters long.');
+      return;
+    }
+
+    createUserMutation.mutate(createForm);
+  };
+
+  const handleGeneratePassword = () => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%';
+    let generated = '';
+    for (let i = 0; i < 10; i++) {
+      generated += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setCreateForm(prev => ({ ...prev, password: generated }));
+    setShowPassword(true);
+  };
+
   // Fetch users with filters
   const { data: usersResponse, isLoading, error, refetch } = useQuery({
     queryKey: ['usersList', { search, statusFilter, subFilter, page }],
@@ -171,9 +246,21 @@ export default function UsersView() {
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       {/* Header */}
-      <div className="flex flex-col gap-1 border-b border-border pb-5">
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">User Management</h1>
-        <p className="text-sm text-muted-foreground">Monitor signups, subscription assignments, and manage access limits.</p>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-border pb-5">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">User Management</h1>
+          <p className="text-sm text-muted-foreground mt-1">Monitor signups, subscription assignments, and manage access limits.</p>
+        </div>
+        <button 
+          onClick={() => {
+            setFormError('');
+            setIsCreateUserOpen(true);
+          }}
+          className="px-4 py-2.5 bg-primary text-primary-foreground font-semibold text-sm rounded-xl hover:bg-primary/90 transition-all duration-200 shadow-md shadow-primary/20 active:scale-95 flex items-center gap-2 cursor-pointer shrink-0"
+        >
+          <UserPlus size={18} />
+          <span>Create User</span>
+        </button>
       </div>
 
       {/* Filters Toolbar */}
@@ -564,6 +651,181 @@ export default function UsersView() {
             </div>
           </div>
         )}
+      </Dialog>
+
+      {/* Create User Modal */}
+      <Dialog
+        isOpen={isCreateUserOpen}
+        onClose={() => {
+          setIsCreateUserOpen(false);
+          setFormError('');
+        }}
+        title="Create New User"
+        size="lg"
+      >
+        <form onSubmit={handleCreateSubmit} className="space-y-4">
+          {formError && (
+            <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-center gap-2 text-rose-500 text-xs font-semibold">
+              <ShieldAlert size={16} className="shrink-0" />
+              <span>{formError}</span>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Full Name */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                <User size={13} className="text-primary" /> Full Name <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="e.g. John Doe"
+                value={createForm.fullName}
+                onChange={(e) => setCreateForm(prev => ({ ...prev, fullName: e.target.value }))}
+                className="w-full h-9 px-3 rounded-lg border border-border bg-background text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary text-foreground placeholder:text-muted-foreground/60"
+              />
+            </div>
+
+            {/* Email Address */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                <Mail size={13} className="text-primary" /> Email Address <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="email"
+                required
+                placeholder="e.g. user@example.com"
+                value={createForm.email}
+                onChange={(e) => setCreateForm(prev => ({ ...prev, email: e.target.value }))}
+                className="w-full h-9 px-3 rounded-lg border border-border bg-background text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary text-foreground placeholder:text-muted-foreground/60"
+              />
+            </div>
+
+            {/* Password */}
+            <div className="space-y-1.5 md:col-span-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                  <Lock size={13} className="text-primary" /> Password <span className="text-rose-500">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={handleGeneratePassword}
+                  className="text-[11px] font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                >
+                  <Key size={11} /> Generate Password
+                </button>
+              </div>
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  placeholder="Min 6 characters"
+                  value={createForm.password}
+                  onChange={(e) => setCreateForm(prev => ({ ...prev, password: e.target.value }))}
+                  className="w-full h-9 pl-3 pr-10 rounded-lg border border-border bg-background text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary text-foreground placeholder:text-muted-foreground/60"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(prev => !prev)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
+                >
+                  {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
+              </div>
+            </div>
+
+            {/* Mobile Phone */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                <Phone size={13} className="text-primary" /> Mobile Phone
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. +91 9876543210"
+                value={createForm.mobile}
+                onChange={(e) => setCreateForm(prev => ({ ...prev, mobile: e.target.value }))}
+                className="w-full h-9 px-3 rounded-lg border border-border bg-background text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary text-foreground placeholder:text-muted-foreground/60"
+              />
+            </div>
+
+            {/* User Role */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                User Role
+              </label>
+              <select
+                value={createForm.role}
+                onChange={(e) => setCreateForm(prev => ({ ...prev, role: e.target.value }))}
+                className="w-full h-9 px-3 rounded-lg border border-border bg-background text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary text-foreground cursor-pointer"
+              >
+                <option value="user">Regular User</option>
+                <option value="admin">Administrator</option>
+              </select>
+            </div>
+
+            {/* Subscription Plan */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                Subscription Plan
+              </label>
+              <select
+                value={createForm.plan}
+                onChange={(e) => setCreateForm(prev => ({ ...prev, plan: e.target.value }))}
+                className="w-full h-9 px-3 rounded-lg border border-border bg-background text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary text-foreground cursor-pointer"
+              >
+                <option value="free">Free Tier</option>
+                {plans.map((p) => (
+                  <option key={p._id || p.slug} value={p.slug}>
+                    {p.name} ({p.billingCycle})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Initial Account Status */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                Initial Status
+              </label>
+              <select
+                value={createForm.accountStatus}
+                onChange={(e) => setCreateForm(prev => ({ ...prev, accountStatus: e.target.value }))}
+                className="w-full h-9 px-3 rounded-lg border border-border bg-background text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary text-foreground cursor-pointer"
+              >
+                <option value="active">Active</option>
+                <option value="suspended">Suspended</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-border flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                setIsCreateUserOpen(false);
+                setFormError('');
+              }}
+              className="px-4 py-2 rounded-lg border border-border text-xs font-bold text-muted-foreground hover:bg-secondary transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={createUserMutation.isLoading}
+              className="px-5 py-2 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold transition-all shadow-md shadow-primary/20 disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+            >
+              {createUserMutation.isLoading ? (
+                <span>Creating User...</span>
+              ) : (
+                <>
+                  <UserPlus size={14} />
+                  <span>Create User</span>
+                </>
+              )}
+            </button>
+          </div>
+        </form>
       </Dialog>
     </div>
   );

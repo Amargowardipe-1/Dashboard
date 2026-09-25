@@ -152,7 +152,7 @@ export default function DashboardOverview({ onViewChange }) {
           sparkline={sparklines.totalUsers}
         />
         <StatCard
-          title="Monthly Active Users"
+          title="Monthly Signups"
           value={stats.monthlyUsers.value}
           growth={stats.monthlyUsers.growth}
           icon={TrendingUp}
@@ -228,10 +228,10 @@ export default function DashboardOverview({ onViewChange }) {
               <p className="text-xs text-muted-foreground">Monthly growth distribution per pricing plan tier.</p>
             </div>
             <button 
-              onClick={() => onViewChange('analytics')}
+              onClick={() => onViewChange('reports')}
               className="text-xs font-semibold text-primary hover:underline flex items-center gap-1"
             >
-              Detailed Analytics <ChevronRight size={14} />
+              View Reports <ChevronRight size={14} />
             </button>
           </div>
           

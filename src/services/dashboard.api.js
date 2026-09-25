@@ -8,6 +8,8 @@ export const dashboardApi = {
     // Build real sparklines from the 7-day trends returned by the backend
     const revenueSpark = charts.revenueTrend?.map(t => t.revenue) || [0];
     const usersSpark = charts.userGrowthTrend?.map(t => t.users) || [0];
+    // Monthly users sparkline — daily signups for current month (synced with monthly card)
+    const monthlyUsersSpark = charts.monthlyUsersTrend?.map(t => t.users) || [0];
 
     // Adapt stats to frontend expected shape
     const stats = {
@@ -16,7 +18,7 @@ export const dashboardApi = {
       premiumUsers: { value: cards.users.premium || 0, growth: 0.0, label: 'Premium Users' },
       freeUsers: { value: cards.users.free || 0, growth: 0.0, label: 'Free Users' },
       todayUsers: { value: cards.users.today || 0, growth: 0.0, label: "Today's Signups" },
-      monthlyUsers: { value: cards.users.monthly || 0, growth: 0.0, label: 'Monthly Active Users' },
+      monthlyUsers: { value: cards.users.monthly || 0, growth: cards.users.monthlyGrowth || 0.0, label: 'Monthly Signups' },
       totalRevenue: { value: cards.revenue.total || 0, growth: 0.0, label: 'Total Revenue' },
       todayRevenue: { value: cards.revenue.today || 0, growth: 0.0, label: "Today's Revenue" },
       monthlyRevenue: { value: cards.revenue.monthly || 0, growth: 0.0, label: 'Monthly Recurring Revenue' },
@@ -30,7 +32,7 @@ export const dashboardApi = {
       premiumUsers: usersSpark,
       freeUsers: usersSpark,
       todayUsers: usersSpark,
-      monthlyUsers: usersSpark,
+      monthlyUsers: monthlyUsersSpark,
       totalRevenue: revenueSpark,
       todayRevenue: revenueSpark,
       monthlyRevenue: revenueSpark,

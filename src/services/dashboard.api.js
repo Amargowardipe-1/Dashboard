@@ -13,15 +13,15 @@ export const dashboardApi = {
 
     // Adapt stats to frontend expected shape
     const stats = {
-      totalUsers: { value: cards.users.total || 0, growth: 0.0, label: 'Total Users' },
+      totalUsers: { value: cards.users.total || 0, growth: cards.users.monthlyGrowth || 0.0, label: 'Total Users' },
       verifiedUsers: { value: cards.users.verified || 0, growth: 0.0, label: 'Verified Users' },
       premiumUsers: { value: cards.users.premium || 0, growth: 0.0, label: 'Premium Users' },
       freeUsers: { value: cards.users.free || 0, growth: 0.0, label: 'Free Users' },
       todayUsers: { value: cards.users.today || 0, growth: 0.0, label: "Today's Signups" },
       monthlyUsers: { value: cards.users.monthly || 0, growth: cards.users.monthlyGrowth || 0.0, label: 'Monthly Signups' },
-      totalRevenue: { value: cards.revenue.total || 0, growth: 0.0, label: 'Total Revenue' },
+      totalRevenue: { value: cards.revenue.total || 0, growth: cards.revenue.revenueGrowth || 0.0, label: 'Total Revenue' },
       todayRevenue: { value: cards.revenue.today || 0, growth: 0.0, label: "Today's Revenue" },
-      monthlyRevenue: { value: cards.revenue.monthly || 0, growth: 0.0, label: 'Monthly Recurring Revenue' },
+      monthlyRevenue: { value: cards.revenue.monthly || 0, growth: cards.revenue.revenueGrowth || 0.0, label: 'Monthly Recurring Revenue' },
       pendingPayments: { value: cards.payments.pending || 0, growth: 0.0, label: 'Pending Payments' },
       activePlans: { value: cards.plans.active || 0, growth: 0.0, label: 'Active Plans' }
     };
@@ -86,15 +86,27 @@ export const dashboardApi = {
       slug: p.slug
     })) || [];
 
+    // Helper to format plan name from slug
+    const formatPlanName = (plan) => {
+      if (!plan || plan === 'free') return 'Free Tier';
+      const s = String(plan).toLowerCase().trim();
+      if (s === 'basic' || s === 'basic-plan') return 'Basic Plan';
+      if (s === 'pro' || s === 'pro-plan') return 'Pro Plan';
+      if (s === 'business' || s === 'business-plan') return 'Business Plan';
+      if (s === 'enterprise' || s === 'enterprise-plan') return 'Enterprise Plan';
+      // Fallback: capitalize slug
+      return s.replace(/[-_]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) + ' Plan';
+    };
+
     // Adapt recentActivity tables
     const latestUsers = recentActivity.latestUsers?.map(u => ({
       id: u._id,
       name: u.fullName,
       email: u.email,
-      subscription: u.subscription?.plan === 'pro' ? 'Pro Plan' : 'Free Tier',
-      status: u.subscription?.status === 'active' ? 'Active' : 'Inactive',
+      subscription: formatPlanName(u.subscription?.plan),
+      status: u.accountStatus === 'suspended' ? 'Suspended' : (u.subscription?.status === 'active' ? 'Active' : 'Inactive'),
       joinedDate: u.createdAt ? new Date(u.createdAt).toISOString().split('T')[0] : '',
-      avatar: u.fullName ? u.fullName.split(' ').map(n => n[0]).join('').toUpperCase() : 'U'
+      avatar: u.fullName ? u.fullName.split(' ').filter(Boolean).slice(0, 2).map(n => n[0]).join('').toUpperCase() : 'U'
     })) || [];
 
     const latestPayments = recentActivity.latestPayments?.map(p => ({
@@ -103,7 +115,7 @@ export const dashboardApi = {
       email: p.userId?.email || '',
       amount: p.amount || 0,
       provider: p.provider || 'Gateway',
-      status: p.status === 'success' ? 'Success' : (p.status === 'pending' ? 'Pending' : 'Failed'),
+      status: p.status === 'success' ? 'Success' : (p.status === 'pending' ? 'Pending' : (p.status === 'refunded' ? 'Refunded' : 'Failed')),
       plan: p.plan || 'Subscription',
       date: p.paidAt ? new Date(p.paidAt).toLocaleString() : new Date(p.createdAt).toLocaleString()
     })) || [];

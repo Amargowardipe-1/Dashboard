@@ -188,6 +188,8 @@ export default function DashboardOverview({ onViewChange }) {
       case 'Failed':
       case 'Suspended':
         return 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20';
+      case 'Refunded':
+        return 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20';
       default:
         return 'bg-slate-500/10 text-slate-600 border-slate-500/20';
     }
@@ -225,7 +227,7 @@ export default function DashboardOverview({ onViewChange }) {
           <div className="flex items-center justify-between border-b border-border pb-4 mb-4">
             <div>
               <h3 className="text-sm font-bold text-foreground">Revenue Trend</h3>
-              <p className="text-xs text-muted-foreground">Monthly growth distribution per pricing plan tier.</p>
+              <p className="text-xs text-muted-foreground">Last 7 days revenue breakdown by pricing plan.</p>
             </div>
             <button 
               onClick={() => onViewChange('reports')}
@@ -514,8 +516,8 @@ export default function DashboardOverview({ onViewChange }) {
             <div className="border-t border-border pt-4 mt-2 flex justify-end gap-2">
               <button 
                 onClick={() => {
-                  alert(`Logs opened for user ${selectedUser.id}`);
                   setSelectedUser(null);
+                  onViewChange('users');
                 }}
                 className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-border hover:bg-secondary text-xs font-semibold transition-colors"
               >
@@ -578,8 +580,8 @@ export default function DashboardOverview({ onViewChange }) {
             <div className="border-t border-border pt-4 mt-2 flex justify-end gap-2">
               <button 
                 onClick={() => {
-                  alert(`Refunding transaction ${selectedPayment.id}...`);
                   setSelectedPayment(null);
+                  onViewChange('payments');
                 }}
                 className="px-3 py-1.5 rounded-lg border border-rose-500/20 hover:bg-rose-500/10 text-rose-500 text-xs font-semibold transition-colors"
                 disabled={selectedPayment.status !== 'Success'}

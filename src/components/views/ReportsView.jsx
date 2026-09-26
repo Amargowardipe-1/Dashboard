@@ -97,12 +97,32 @@ const downloadCSV = (filename, rows, headers) => {
   URL.revokeObjectURL(url);
 };
 
+// ─── Date Formatter for CSV ─────────────────────────────────────
+const formatReportDate = (dateStr) => {
+  if (!dateStr) return '—';
+  const str = String(dateStr).trim();
+  const parts = str.split('-');
+  if (parts.length === 3 && parts[0].length === 4) {
+    const y = parts[0];
+    const m = Number(parts[1]);
+    const d = parts[2];
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${d.padStart(2, '0')} ${monthNames[m - 1] || ''} ${y}`;
+  }
+  const dt = new Date(dateStr);
+  if (!isNaN(dt.getTime())) {
+    return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+  return str;
+};
+
 // ─── Main ───────────────────────────────────────────────────────
 export default function ReportsView() {
   const { symbol, currency, formatAmount } = useCurrency();
   const [activeTab, setActiveTab] = useState('overview');
   const [paymentPage, setPaymentPage] = useState(1);
   const [paymentStatus, setPaymentStatus] = useState('');
+  const [isExporting, setIsExporting] = useState(false);
 
   const now = new Date();
   const currentYear = now.getFullYear();
@@ -236,66 +256,205 @@ export default function ReportsView() {
     : (subscriptions?.monthlySubscriptionTrend || []);
 
   // ── Download handler ────────────────────────────────────────
-  const handleDownload = () => {
+  const handleDownload = async () => {
     const ts = new Date().toISOString().split('T')[0];
-    if (activeTab === 'overview' || activeTab === 'revenue') {
-      if (isDayWiseRevenue) {
-        const rows = (revenue?.dailyData || []).map(d => ({
-          Date: d.name || d.date,
-          [`Total Revenue (${currency})`]: d.total,
-          'Payments Count': d.payments,
-        }));
-        downloadCSV(`daily_revenue_${ts}.csv`, rows, ['Date', `Total Revenue (${currency})`, 'Payments Count']);
-      } else {
-        const rows = (revenue?.monthlyData || []).map(m => ({
-          Month: m.name,
-          [`Total Revenue (${currency})`]: m.total,
-          'Payments Count': m.payments,
-        }));
-        downloadCSV(`revenue_report_${ts}.csv`, rows, ['Month', `Total Revenue (${currency})`, 'Payments Count']);
+    setIsExporting(true);
+
+    // Human-readable timeframe tag for filenames
+    let periodTag = ts;
+    if (dateFilterType === 'year') periodTag = `year_${selectedYear}`;
+    else if (dateFilterType === 'month') periodTag = `month_${selectedMonth || 'current'}`;
+    else if (dateFilterType === 'this_month') periodTag = `this_month_${ts}`;
+    else if (dateFilterType === 'last_month') periodTag = `last_month_${ts}`;
+    else if (dateFilterType === 'range') periodTag = `${startDate}_to_${endDate}`;
+
+    try {
+      if (activeTab === 'overview') {
+        // OVERVIEW TAB: Combined Comprehensive Report (Timeline + Revenue + Signups)
+        if (isDayWiseRevenue || isDayWiseUsers) {
+          const dailyMap = {};
+          (revenue?.dailyData || []).forEach(d => {
+            const rawKey = d.date || d.name;
+            const formattedDate = formatReportDate(d.date || d.name);
+            dailyMap[rawKey] = {
+              'Date': formattedDate,
+              'Day': d.name || rawKey,
+              [`Revenue (${currency})`]: d.total || 0,
+              'Payments Count': d.payments || 0,
+              'New Signups': 0,
+            };
+          });
+          (users?.dailyGrowth || []).forEach(u => {
+            const rawKey = u.date || u.name;
+            const formattedDate = formatReportDate(u.date || u.name);
+            if (!dailyMap[rawKey]) {
+              dailyMap[rawKey] = {
+                'Date': formattedDate,
+                'Day': u.name || rawKey,
+                [`Revenue (${currency})`]: 0,
+                'Payments Count': 0,
+                'New Signups': u.signups || 0,
+              };
+            } else {
+              dailyMap[rawKey]['New Signups'] = u.signups || 0;
+            }
+          });
+          const rows = Object.values(dailyMap).sort((a, b) => a.Date.localeCompare(b.Date));
+          downloadCSV(`overview_daily_report_${periodTag}.csv`, rows, ['Date', 'Day', `Revenue (${currency})`, 'Payments Count', 'New Signups']);
+        } else {
+          // Year-wise Overview
+          const monthMap = {};
+          (revenue?.monthlyData || []).forEach(m => {
+            monthMap[m.name] = {
+              Month: m.name,
+              [`Revenue (${currency})`]: m.total || 0,
+              'Payments Count': m.payments || 0,
+              'New Signups': 0,
+            };
+          });
+          (users?.monthlyGrowth || []).forEach(u => {
+            if (!monthMap[u.name]) {
+              monthMap[u.name] = {
+                Month: u.name,
+                [`Revenue (${currency})`]: 0,
+                'Payments Count': 0,
+                'New Signups': u.signups || 0,
+              };
+            } else {
+              monthMap[u.name]['New Signups'] = u.signups || 0;
+            }
+          });
+          const rows = Object.values(monthMap);
+          downloadCSV(`overview_yearly_report_${periodTag}.csv`, rows, ['Month', `Revenue (${currency})`, 'Payments Count', 'New Signups']);
+        }
+      } else if (activeTab === 'revenue') {
+        // REVENUE TAB: Revenue Breakdown + Average per payment
+        if (isDayWiseRevenue) {
+          const rows = (revenue?.dailyData || []).map(d => ({
+            'Date': formatReportDate(d.date || d.name),
+            'Day': d.name || d.date,
+            [`Total Revenue (${currency})`]: d.total,
+            'Payments Count': d.payments,
+            [`Avg Ticket (${currency})`]: d.payments > 0 ? (d.total / d.payments).toFixed(2) : 0,
+          }));
+          downloadCSV(`revenue_daily_report_${periodTag}.csv`, rows, ['Date', 'Day', `Total Revenue (${currency})`, 'Payments Count', `Avg Ticket (${currency})`]);
+        } else {
+          const rows = (revenue?.monthlyData || []).map(m => ({
+            Month: m.name,
+            [`Total Revenue (${currency})`]: m.total,
+            'Payments Count': m.payments,
+            [`Avg Ticket (${currency})`]: m.payments > 0 ? (m.total / m.payments).toFixed(2) : 0,
+          }));
+          downloadCSV(`revenue_yearly_report_${periodTag}.csv`, rows, ['Month', `Total Revenue (${currency})`, 'Payments Count', `Avg Ticket (${currency})`]);
+        }
+      } else if (activeTab === 'users') {
+        // USERS TAB: Signups Growth
+        if (isDayWiseUsers) {
+          const rows = (users?.dailyGrowth || []).map(d => ({
+            'Date': formatReportDate(d.date || d.name),
+            'Day': d.name || d.date,
+            'New Signups': d.signups,
+          }));
+          downloadCSV(`users_daily_growth_${periodTag}.csv`, rows, ['Date', 'Day', 'New Signups']);
+        } else {
+          const rows = (users?.monthlyGrowth || []).map(m => ({
+            Month: m.name,
+            'New Signups': m.signups,
+          }));
+          downloadCSV(`users_yearly_report_${periodTag}.csv`, rows, ['Month', 'New Signups']);
+        }
+      } else if (activeTab === 'subscriptions') {
+        // SUBSCRIPTIONS TAB: Trend (Activations vs Churn) + History
+        const trend = (subscriptions?.dailySubscriptionTrend && subscriptions.dailySubscriptionTrend.length > 0)
+          ? subscriptions.dailySubscriptionTrend
+          : (subscriptions?.monthlySubscriptionTrend || []);
+
+        if (trend.length > 0) {
+          const rows = trend.map(t => ({
+            'Date': t.date ? formatReportDate(t.date) : (t.name || '—'),
+            'Period': t.name || t.date,
+            'Activated Subscriptions': t.Activated || 0,
+            'Cancelled / Churned': t.Churned || 0,
+            'Net Growth': (t.Activated || 0) - (t.Churned || 0),
+          }));
+          downloadCSV(`subscriptions_trend_${periodTag}.csv`, rows, ['Date', 'Period', 'Activated Subscriptions', 'Cancelled / Churned', 'Net Growth']);
+        } else {
+          const rows = (subscriptions?.recentHistory || []).map(h => ({
+            User: h.user,
+            Email: h.email,
+            Action: h.action,
+            [`Amount (${currency})`]: h.amount,
+            Provider: h.provider,
+            Note: h.note,
+            Date: h.createdAt ? formatReportDate(h.createdAt) : '',
+          }));
+          downloadCSV(`subscriptions_report_${periodTag}.csv`, rows, ['User', 'Email', 'Action', `Amount (${currency})`, 'Provider', 'Note', 'Date']);
+        }
+      } else if (activeTab === 'payments') {
+        // PAYMENTS TAB: Fetch ALL records for the filter period (unpaginated) with complete financial metadata!
+        const allPaymentsData = await reportsApi.getPayments({
+          all: true,
+          status: paymentStatus || undefined,
+          ...filterParams,
+        });
+
+        const list = allPaymentsData?.payments || [];
+        const rows = list.map(p => {
+          const rawDate = p.paidAt || p.createdAt;
+          const formattedDate = rawDate ? formatReportDate(rawDate) : '—';
+          return {
+            'Transaction ID': p.razorpayPaymentId && p.razorpayPaymentId !== '—' ? p.razorpayPaymentId : p._id,
+            'Order ID': p.razorpayOrderId || '—',
+            'Customer': p.user,
+            'Email': p.email,
+            [`Amount (${currency})`]: p.amount,
+            [`Original Amount (${currency})`]: p.originalAmount || p.amount,
+            [`Discount (${currency})`]: p.discountAmount || 0,
+            'Coupon Code': p.couponCode || '—',
+            'Plan': p.plan,
+            'Provider': p.provider,
+            'Status': p.status,
+            'Date': formattedDate,
+          };
+        });
+
+        downloadCSV(
+          `payments_report_${periodTag}.csv`,
+          rows,
+          [
+            'Transaction ID',
+            'Order ID',
+            'Customer',
+            'Email',
+            `Amount (${currency})`,
+            `Original Amount (${currency})`,
+            `Discount (${currency})`,
+            'Coupon Code',
+            'Plan',
+            'Provider',
+            'Status',
+            'Date',
+          ]
+        );
       }
-    } else if (activeTab === 'users') {
-      if (isDayWiseUsers) {
-        const rows = (users?.dailyGrowth || []).map(d => ({ Date: d.name || d.date, 'New Signups': d.signups }));
-        downloadCSV(`daily_users_growth_${ts}.csv`, rows, ['Date', 'New Signups']);
-      } else {
-        const rows = (users?.monthlyGrowth || []).map(m => ({ Month: m.name, 'New Signups': m.signups }));
-        downloadCSV(`users_report_${ts}.csv`, rows, ['Month', 'New Signups']);
-      }
-    } else if (activeTab === 'subscriptions') {
-      const rows = (subscriptions?.recentHistory || []).map(h => ({
-        User: h.user,
-        Email: h.email,
-        Action: h.action,
-        [`Amount (${currency})`]: h.amount,
-        Provider: h.provider,
-        Note: h.note,
-        Date: h.createdAt ? new Date(h.createdAt).toLocaleDateString('en-IN') : '',
-      }));
-      downloadCSV(`subscriptions_report_${ts}.csv`, rows, ['User','Email','Action',`Amount (${currency})`,'Provider','Note','Date']);
-    } else if (activeTab === 'payments') {
-      const rows = (payments?.payments || []).map(p => ({
-        User: p.user,
-        Email: p.email,
-        [`Amount (${currency})`]: p.amount,
-        Plan: p.plan,
-        Provider: p.provider,
-        Status: p.status,
-        Date: p.paidAt ? new Date(p.paidAt).toLocaleDateString('en-IN') : '',
-      }));
-      downloadCSV(`payments_report_${ts}.csv`, rows, ['User','Email',`Amount (${currency})`,'Plan','Provider','Status','Date']);
+    } catch (err) {
+      console.error('Failed to export CSV report:', err);
+    } finally {
+      setIsExporting(false);
     }
   };
 
   // ── Determine if download is ready ──────────────────────────
   const isDownloadReady = (
-    (activeTab === 'overview' || activeTab === 'revenue') && (revenue?.dailyData || revenue?.monthlyData)
+    activeTab === 'overview' && (revenue?.dailyData || revenue?.monthlyData || users?.dailyGrowth || users?.monthlyGrowth)
+  ) || (
+    activeTab === 'revenue' && (revenue?.dailyData || revenue?.monthlyData)
   ) || (
     activeTab === 'users' && (users?.dailyGrowth || users?.monthlyGrowth)
   ) || (
-    activeTab === 'subscriptions' && subscriptions?.recentHistory
+    activeTab === 'subscriptions' && (subscriptions?.dailySubscriptionTrend || subscriptions?.monthlySubscriptionTrend || subscriptions?.recentHistory)
   ) || (
-    activeTab === 'payments' && payments?.payments
+    activeTab === 'payments' && (payments?.payments || payments?.total > 0)
   );
 
   return (
@@ -310,11 +469,20 @@ export default function ReportsView() {
         </div>
         <button
           onClick={handleDownload}
-          disabled={!isDownloadReady}
+          disabled={!isDownloadReady || isExporting}
           className="shrink-0 flex items-center gap-2 h-9 px-4 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold transition-all shadow-md shadow-primary/20 disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          <Download size={13} />
-          Download CSV
+          {isExporting ? (
+            <>
+              <RefreshCcw size={13} className="animate-spin" />
+              Exporting...
+            </>
+          ) : (
+            <>
+              <Download size={13} />
+              Download CSV
+            </>
+          )}
         </button>
       </div>
 

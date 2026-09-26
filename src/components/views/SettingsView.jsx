@@ -19,7 +19,17 @@ import {
   ShieldCheck,
   CheckCircle2,
   Settings as SettingsIcon,
-  DollarSign
+  DollarSign,
+  CreditCard,
+  Copy,
+  Check,
+  ExternalLink,
+  AlertTriangle,
+  Loader2,
+  Shield,
+  Key,
+  Globe,
+  RefreshCw,
 } from 'lucide-react';
 
 export default function SettingsView() {
@@ -28,9 +38,15 @@ export default function SettingsView() {
   
   const [activeTab, setActiveTab] = useState('ai');
   const [showApiKey, setShowApiKey] = useState(false);
+  const [showRzpSecret, setShowRzpSecret] = useState(false);
+  const [showRzpWebhookSecret, setShowRzpWebhookSecret] = useState(false);
+  const [showStripeSecret, setShowStripeSecret] = useState(false);
+  const [isTestingGateway, setIsTestingGateway] = useState(false);
+  const [testGatewayResult, setTestGatewayResult] = useState(null);
+  const [copiedWebhook, setCopiedWebhook] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   
-  const { register, handleSubmit, reset, watch, formState: { isSubmitting } } = useForm({
+  const { register, handleSubmit, reset, watch, setValue, formState: { isSubmitting } } = useForm({
     defaultValues: {
       // Profile
       name: profile?.name || '',
@@ -48,6 +64,23 @@ export default function SettingsView() {
       emailNotifications: true,
       smsNotifications: false,
       currency: 'INR',
+      // Payment Gateway
+      paymentGateway: {
+        provider: 'razorpay',
+        environment: 'test',
+        razorpay: {
+          enabled: true,
+          keyId: '',
+          keySecret: '',
+          webhookSecret: '',
+        },
+        stripe: {
+          enabled: false,
+          publishableKey: '',
+          secretKey: '',
+          webhookSecret: '',
+        },
+      },
     }
   });
 
@@ -56,6 +89,21 @@ export default function SettingsView() {
   const voiceTransactionScanner = watch('voiceTransactionScanner');
   const aiChatbotAdvisor = watch('aiChatbotAdvisor');
   const selectedCurrency = watch('currency');
+
+  // Watched payment fields
+  const paymentProvider = watch('paymentGateway.provider');
+  const paymentEnvironment = watch('paymentGateway.environment');
+  const rzpEnabled = watch('paymentGateway.razorpay.enabled');
+  const stripeEnabled = watch('paymentGateway.stripe.enabled');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const hash = window.location.hash.replace('#', '').trim();
+      if (['ai', 'payment', 'profile', 'system', 'notifications'].includes(hash)) {
+        setActiveTab(hash);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     const fetchSettings = async () => {
@@ -78,6 +126,22 @@ export default function SettingsView() {
           emailNotifications: systemSettings?.emailNotifications ?? true,
           smsNotifications: systemSettings?.smsNotifications ?? false,
           currency: systemSettings?.currency || 'INR',
+          paymentGateway: {
+            provider: systemSettings?.paymentGateway?.provider || 'razorpay',
+            environment: systemSettings?.paymentGateway?.environment || 'test',
+            razorpay: {
+              enabled: systemSettings?.paymentGateway?.razorpay?.enabled ?? true,
+              keyId: systemSettings?.paymentGateway?.razorpay?.keyId || '',
+              keySecret: systemSettings?.paymentGateway?.razorpay?.keySecret || '',
+              webhookSecret: systemSettings?.paymentGateway?.razorpay?.webhookSecret || '',
+            },
+            stripe: {
+              enabled: systemSettings?.paymentGateway?.stripe?.enabled ?? false,
+              publishableKey: systemSettings?.paymentGateway?.stripe?.publishableKey || '',
+              secretKey: systemSettings?.paymentGateway?.stripe?.secretKey || '',
+              webhookSecret: systemSettings?.paymentGateway?.stripe?.webhookSecret || '',
+            },
+          },
         });
       } catch (error) {
         console.error('Failed to load settings:', error);
@@ -87,6 +151,37 @@ export default function SettingsView() {
     };
     fetchSettings();
   }, [profile, reset]);
+
+  const handleTestConnection = async () => {
+    try {
+      setIsTestingGateway(true);
+      setTestGatewayResult(null);
+      const gatewayData = watch('paymentGateway');
+      const res = await settingsApi.testPaymentGateway({
+        provider: gatewayData?.provider || 'razorpay',
+        keyId: gatewayData?.razorpay?.keyId,
+        keySecret: gatewayData?.razorpay?.keySecret,
+      });
+      setTestGatewayResult({
+        success: res.success,
+        message: res.message || 'Payment gateway connection verified successfully!',
+      });
+    } catch (err) {
+      setTestGatewayResult({
+        success: false,
+        message: err?.response?.data?.message || err.message || 'Payment gateway connection failed.',
+      });
+    } finally {
+      setIsTestingGateway(false);
+    }
+  };
+
+  const handleCopyWebhook = () => {
+    const webhookUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/v1/payment/webhook`;
+    navigator.clipboard.writeText(webhookUrl);
+    setCopiedWebhook(true);
+    setTimeout(() => setCopiedWebhook(false), 2500);
+  };
 
   const onSubmit = async (data) => {
     try {
@@ -120,12 +215,13 @@ export default function SettingsView() {
         emailNotifications: data.emailNotifications,
         smsNotifications: data.smsNotifications,
         currency: data.currency,
+        paymentGateway: data.paymentGateway,
       });
 
       // Update Dashboard Redux UI Currency State
       dispatch(setCurrency(data.currency));
 
-      alert(`Settings updated! Dashboard currency set to ${data.currency}.`);
+      alert('Settings & Payment Configuration saved successfully!');
     } catch (error) {
       alert(error?.response?.data?.message || error.message || 'Failed to save settings.');
     }
@@ -133,6 +229,7 @@ export default function SettingsView() {
 
   const tabs = [
     { id: 'ai', label: 'AI Engine & Models', icon: Cpu },
+    { id: 'payment', label: 'Payment Gateway', icon: CreditCard },
     { id: 'profile', label: 'Super Admin Profile', icon: User },
     { id: 'system', label: 'System & Security', icon: ShieldCheck },
     { id: 'notifications', label: 'Alert Notifications', icon: BellRing },
@@ -283,6 +380,374 @@ export default function SettingsView() {
                 
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Tab Content: Payment Gateway */}
+        {activeTab === 'payment' && (
+          <div className="space-y-6 animate-in slide-in-from-bottom-2">
+            
+            {/* Top Gateway Environment & Status Banner */}
+            <div className="rounded-xl border border-border bg-card shadow-sm p-6 space-y-6">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border pb-6">
+                <div>
+                  <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+                    <CreditCard className="text-primary" size={20} />
+                    Payment Gateway Engine
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Manage API credentials, test/live environments, and webhook secrets. All changes apply in real-time.
+                  </p>
+                </div>
+                
+                {/* Active Environment Badge */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-muted-foreground">Mode:</span>
+                  {paymentEnvironment === 'live' ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                      LIVE PRODUCTION
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                      <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                      TEST (SANDBOX)
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Environment Selector */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <label className={`flex items-start gap-3 p-4 rounded-xl border cursor-pointer transition-all ${
+                  paymentEnvironment === 'test' 
+                    ? 'border-primary bg-primary/5 ring-1 ring-primary' 
+                    : 'border-border bg-background hover:bg-muted/30'
+                }`}>
+                  <input
+                    type="radio"
+                    value="test"
+                    {...register('paymentGateway.environment')}
+                    className="mt-1 text-primary focus:ring-primary"
+                  />
+                  <div>
+                    <p className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                      Test Mode (Sandbox)
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400">Safe for Testing</span>
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Use Razorpay test keys (<code className="text-xs bg-muted px-1 py-0.5 rounded">rzp_test_...</code>). No real bank charges.
+                    </p>
+                  </div>
+                </label>
+
+                <label className={`flex items-start gap-3 p-4 rounded-xl border cursor-pointer transition-all ${
+                  paymentEnvironment === 'live' 
+                    ? 'border-emerald-500 bg-emerald-500/5 ring-1 ring-emerald-500' 
+                    : 'border-border bg-background hover:bg-muted/30'
+                }`}>
+                  <input
+                    type="radio"
+                    value="live"
+                    {...register('paymentGateway.environment')}
+                    className="mt-1 text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <div>
+                    <p className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                      Live Mode (Production)
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">Real Payments</span>
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Use Razorpay live keys (<code className="text-xs bg-muted px-1 py-0.5 rounded">rzp_live_...</code>). Real user bank payments will be collected.
+                    </p>
+                  </div>
+                </label>
+              </div>
+
+              {/* Primary Payment Provider Selector */}
+              <div className="space-y-3 pt-2">
+                <label className="text-xs font-bold text-muted-foreground uppercase tracking-wide">
+                  Default Payment Provider
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setValue('paymentGateway.provider', 'razorpay', { shouldDirty: true })}
+                    className={`flex items-center justify-between p-4 rounded-xl border text-left transition-all ${
+                      paymentProvider === 'razorpay'
+                        ? 'border-primary bg-primary/10 text-foreground ring-1 ring-primary'
+                        : 'border-border bg-background text-muted-foreground hover:bg-muted/20'
+                    }`}
+                  >
+                    <div>
+                      <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
+                        Razorpay
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-primary/20 text-primary">Primary</span>
+                      </h4>
+                      <p className="text-xs text-muted-foreground mt-0.5">UPI, Debit/Credit Cards, Net Banking, Wallets (INR)</p>
+                    </div>
+                    {paymentProvider === 'razorpay' && <CheckCircle2 size={18} className="text-primary" />}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setValue('paymentGateway.provider', 'stripe', { shouldDirty: true })}
+                    className={`flex items-center justify-between p-4 rounded-xl border text-left transition-all ${
+                      paymentProvider === 'stripe'
+                        ? 'border-primary bg-primary/10 text-foreground ring-1 ring-primary'
+                        : 'border-border bg-background text-muted-foreground hover:bg-muted/20'
+                    }`}
+                  >
+                    <div>
+                      <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
+                        Stripe
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-muted text-muted-foreground">International</span>
+                      </h4>
+                      <p className="text-xs text-muted-foreground mt-0.5">Global Credit/Debit Cards, USD / EUR multi-currency</p>
+                    </div>
+                    {paymentProvider === 'stripe' && <CheckCircle2 size={18} className="text-primary" />}
+                  </button>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Razorpay Configuration Details Card */}
+            <div className="rounded-xl border border-border bg-card shadow-sm p-6 space-y-6">
+              <div className="flex items-center justify-between border-b border-border pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500 font-bold text-sm">
+                    RZP
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-foreground">Razorpay API Credentials</h4>
+                    <p className="text-xs text-muted-foreground">Obtain these from your Razorpay Dashboard &gt; Settings &gt; API Keys.</p>
+                  </div>
+                </div>
+
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" {...register('paymentGateway.razorpay.enabled')} className="sr-only peer" />
+                  <div className="w-11 h-6 bg-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                
+                {/* Razorpay Key ID */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-1.5">
+                      <Key size={13} className="text-primary" />
+                      Razorpay Key ID
+                    </label>
+                    <span className="text-[11px] text-muted-foreground font-mono">
+                      {paymentEnvironment === 'live' ? 'rzp_live_...' : 'rzp_test_...'}
+                    </span>
+                  </div>
+                  <input
+                    type="text"
+                    {...register('paymentGateway.razorpay.keyId')}
+                    placeholder={paymentEnvironment === 'live' ? "rzp_live_abcdef123456" : "rzp_test_abcdef123456"}
+                    className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all"
+                  />
+                  <p className="text-[11px] text-muted-foreground">Public Key ID passed to mobile app & checkout</p>
+                </div>
+
+                {/* Razorpay Key Secret */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-1.5">
+                    <Shield size={13} className="text-primary" />
+                    Razorpay Key Secret
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showRzpSecret ? "text" : "password"}
+                      {...register('paymentGateway.razorpay.keySecret')}
+                      placeholder="••••••••••••••••••••••••••••••"
+                      className="w-full h-10 pl-3 pr-10 rounded-lg border border-border bg-background text-sm font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowRzpSecret(!showRzpSecret)}
+                      className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground transition-colors"
+                      title={showRzpSecret ? "Hide Key Secret" : "Show Key Secret"}
+                    >
+                      {showRzpSecret ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">Private server secret used to create orders and verify payment signatures</p>
+                </div>
+
+                {/* Razorpay Webhook Secret */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-1.5">
+                    <ShieldCheck size={13} className="text-primary" />
+                    Razorpay Webhook Secret (Optional)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showRzpWebhookSecret ? "text" : "password"}
+                      {...register('paymentGateway.razorpay.webhookSecret')}
+                      placeholder="webhook_secret_..."
+                      className="w-full h-10 pl-3 pr-10 rounded-lg border border-border bg-background text-sm font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowRzpWebhookSecret(!showRzpWebhookSecret)}
+                      className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground transition-colors"
+                      title={showRzpWebhookSecret ? "Hide Webhook Secret" : "Show Webhook Secret"}
+                    >
+                      {showRzpWebhookSecret ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">Used to verify asynchronous webhook event notifications from Razorpay</p>
+                </div>
+
+                {/* Webhook Endpoint URL */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-1.5">
+                    <Globe size={13} className="text-primary" />
+                    Webhook Endpoint URL
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={`${typeof window !== 'undefined' ? window.location.origin : ''}/api/v1/payment/webhook`}
+                      className="w-full h-10 px-3 rounded-lg border border-border bg-muted/30 text-xs font-mono text-muted-foreground cursor-not-allowed select-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleCopyWebhook}
+                      className="h-10 px-3 border border-border bg-background hover:bg-muted text-foreground text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 shrink-0"
+                    >
+                      {copiedWebhook ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+                      {copiedWebhook ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">Add this URL in Razorpay Dashboard &gt; Webhooks with event <code className="text-[11px] bg-muted px-1 py-0.5 rounded">payment.captured</code></p>
+                </div>
+
+              </div>
+
+              {/* Real-time Connection Test Action */}
+              <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-border">
+                <div className="text-xs text-muted-foreground">
+                  Verify these credentials directly against the Razorpay API before saving.
+                </div>
+                <button
+                  type="button"
+                  onClick={handleTestConnection}
+                  disabled={isTestingGateway}
+                  className="h-9 px-4 rounded-lg border border-primary/30 bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {isTestingGateway ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      Testing Connection...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw size={14} />
+                      Test Razorpay Connection
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Connection Test Feedback Result */}
+              {testGatewayResult && (
+                <div className={`p-4 rounded-xl border text-xs flex items-start gap-3 animate-in fade-in duration-200 ${
+                  testGatewayResult.success 
+                    ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400' 
+                    : 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400'
+                }`}>
+                  {testGatewayResult.success ? (
+                    <CheckCircle2 size={18} className="shrink-0 text-emerald-500 mt-0.5" />
+                  ) : (
+                    <AlertTriangle size={18} className="shrink-0 text-rose-500 mt-0.5" />
+                  )}
+                  <div>
+                    <p className="font-bold text-sm">
+                      {testGatewayResult.success ? 'Gateway Verified' : 'Connection Error'}
+                    </p>
+                    <p className="mt-0.5 leading-relaxed">{testGatewayResult.message}</p>
+                  </div>
+                </div>
+              )}
+
+            </div>
+
+            {/* Stripe Configuration Card (Collapsible/Optional) */}
+            <div className="rounded-xl border border-border bg-card shadow-sm p-6 space-y-6">
+              <div className="flex items-center justify-between border-b border-border pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-500 font-bold text-sm">
+                    STR
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-foreground">Stripe Gateway (International)</h4>
+                    <p className="text-xs text-muted-foreground">Optional gateway for overseas clients paying with non-INR cards.</p>
+                  </div>
+                </div>
+
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" {...register('paymentGateway.stripe.enabled')} className="sr-only peer" />
+                  <div className="w-11 h-6 bg-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                
+                {/* Stripe Publishable Key */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-1.5">
+                    <Key size={13} className="text-primary" />
+                    Publishable Key
+                  </label>
+                  <input
+                    type="text"
+                    {...register('paymentGateway.stripe.publishableKey')}
+                    placeholder="pk_test_..."
+                    className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all"
+                  />
+                </div>
+
+                {/* Stripe Secret Key */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-1.5">
+                    <Shield size={13} className="text-primary" />
+                    Secret Key
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showStripeSecret ? "text" : "password"}
+                      {...register('paymentGateway.stripe.secretKey')}
+                      placeholder="sk_test_..."
+                      className="w-full h-10 pl-3 pr-10 rounded-lg border border-border bg-background text-sm font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowStripeSecret(!showStripeSecret)}
+                      className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground transition-colors"
+                      title={showStripeSecret ? "Hide Secret Key" : "Show Secret Key"}
+                    >
+                      {showStripeSecret ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            {/* Hot-reload notice banner */}
+            <div className="p-4 rounded-xl border border-primary/20 bg-primary/5 flex items-start gap-3">
+              <Sparkles size={18} className="text-primary shrink-0 mt-0.5" />
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                <span className="font-bold text-foreground">Zero Downtime Dynamic Configuration:</span> Key updates take effect immediately on all subsequent order generation and signature verification operations. Mobile and web checkouts will receive the updated Key ID on the next checkout request.
+              </p>
+            </div>
+
           </div>
         )}
 

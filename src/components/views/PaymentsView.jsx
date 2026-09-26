@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useDispatch } from 'react-redux';
+import { setActiveView } from '@/store/uiSlice';
 import { useQuery } from '@tanstack/react-query';
 import { paymentsApi } from '@/services/payments.api';
 import { useCurrency } from '@/hooks/useCurrency';
@@ -17,7 +19,8 @@ import {
   CheckCircle,
   Clock,
   XCircle,
-  RefreshCcw
+  RefreshCcw,
+  Settings
 } from 'lucide-react';
 
 // ─── Helpers ────────────────────────────────────────────────────
@@ -55,6 +58,7 @@ function SummaryCard({ icon: Icon, label, value, colorClass }) {
 }
 
 export default function PaymentsView() {
+  const dispatch = useDispatch();
   const { formatAmount } = useCurrency();
   const [search, setSearch]               = useState('');
   const [statusFilter, setStatusFilter]   = useState('');
@@ -96,11 +100,26 @@ export default function PaymentsView() {
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       {/* Header */}
-      <div className="flex flex-col gap-1 border-b border-border pb-5">
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Payments Ledger</h1>
-        <p className="text-sm text-muted-foreground">
-          Trace billing details, examine gateway invoices, and manage subscriber transactions.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-5">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Payments Ledger</h1>
+          <p className="text-sm text-muted-foreground">
+            Trace billing details, examine gateway invoices, and manage subscriber transactions.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            if (typeof window !== 'undefined') {
+              window.location.hash = 'payment';
+            }
+            dispatch(setActiveView('settings'));
+          }}
+          className="inline-flex items-center gap-2 h-9 px-3.5 rounded-lg border border-border bg-card hover:bg-muted text-foreground text-xs font-bold transition-all shadow-sm shrink-0"
+        >
+          <Settings size={14} className="text-primary" />
+          Gateway Settings
+        </button>
       </div>
 
       {/* Summary Cards */}

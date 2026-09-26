@@ -9,6 +9,10 @@ export const settingsApi = {
     const response = await apiClient.put('/v1/admin/settings', payload);
     return response.data.data;
   },
+  testPaymentGateway: async (payload) => {
+    const response = await apiClient.post('/v1/admin/settings/test-payment', payload);
+    return response.data;
+  },
 };
 
 export default settingsApi;
